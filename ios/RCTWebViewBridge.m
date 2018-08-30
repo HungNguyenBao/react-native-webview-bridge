@@ -14,13 +14,42 @@
 
 #import <UIKit/UIKit.h>
 
+#if __has_include(<React/RCTAutoInsetsProtocol.h>)
 #import <React/RCTAutoInsetsProtocol.h>
+#else
+#import "RCTAutoInsetsProtocol.h"
+#endif
+
+#if __has_include(<React/RCTConvert.h>)
 #import <React/RCTConvert.h>
+#else
+#import "RCTConvert.h"
+#endif
+
+#if __has_include(<React/RCTEventDispatcher.h>)
 #import <React/RCTEventDispatcher.h>
+#else
+#import "RCTEventDispatcher.h"
+#endif
+
+#if __has_include(<React/RCTLog.h>)
 #import <React/RCTLog.h>
+#else
+#import "RCTLog.h"
+#endif
+
+#if __has_include(<React/RCTUtils.h>)
 #import <React/RCTUtils.h>
-#import <React/RCTView.h>
+#else
+#import "RCTUtils.h"
+#endif
+
+#if __has_include(<React/UIView+React.h>)
+#import <React/UIView+React.h>
+#else
 #import "UIView+React.h"
+#endif
+
 #import <objc/runtime.h>
 
 //This is a very elegent way of defining multiline string in objective-c.
@@ -98,11 +127,8 @@ RCT_NOT_IMPLEMENTED(- (instancetype)initWithCoder:(NSCoder *)aDecoder)
       }
     }());
   );
-    
-  // Escape singlequotes or messages containing ' will fail
-  NSString *quotedMessage = [message stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
 
-  NSString *command = [NSString stringWithFormat: format, quotedMessage];
+  NSString *command = [NSString stringWithFormat: format, message];
   [_webView stringByEvaluatingJavaScriptFromString:command];
 }
 
