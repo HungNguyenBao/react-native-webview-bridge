@@ -3,6 +3,8 @@ package com.github.alinz.reactnativewebviewbridge;
 import android.net.Uri;
 import android.text.TextUtils;
 import android.util.Log;
+import android.view.ViewGroup;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
@@ -36,6 +38,7 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
     private static final String REACT_CLASS = "RCTWebViewBridge";
 
     public static final int COMMAND_SEND_TO_BRIDGE = 101;
+    public static final int COMMAND_EVALUTEJS = 102;
 
     @Override
     public String getName() {
@@ -49,6 +52,7 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
         Map<String, Integer> commandsMap = new HashMap<>();
 
         commandsMap.put("sendToBridge", COMMAND_SEND_TO_BRIDGE);
+        commandsMap.put("evaluateJS", COMMAND_EVALUTEJS);
 
         return commandsMap;
     }
@@ -57,7 +61,10 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
     protected ReactWebView createViewInstance(ThemedReactContext reactContext) {
         ReactWebView webView;
         webView = new ReactWebView(reactContext);
+        ViewGroup.LayoutParams params = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        webView.setLayoutParams(params);
         webView.addJavascriptInterface(new JavascriptBridge(webView), "WebViewBridge");
+        webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new ReactWebViewClient());
         return webView;
     }
@@ -69,18 +76,33 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
         switch (commandId) {
             case COMMAND_SEND_TO_BRIDGE:
                 sendToBridge(root, args.getString(0));
+                Log.d("Send", "32");
+                break;
+            case COMMAND_EVALUTEJS:
+                Log.d("Send", "33");
+//                root.evaluateJavascript(args.getString(0), null);
+                evaluateJS(root, args.getString(0));
                 break;
             default:
                 //do nothing!!!!
         }
     }
 
-    private void sendToBridge(WebView view, String message) {
-        String script = "WebViewBridge.onMessage('" + message + "');";
+    private void sendToBridge(WebView view, String script) {
+//        String script = "WebViewBridge.onMessage('" + message + "');";
+//        String scrip2 = "WebViewBridge.send(\"aa\")";
         WebViewBridgeManager.evaluateJavascript(view, script);
     }
 
     static private void evaluateJavascript(WebView root, String javascript) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
+            root.evaluateJavascript(javascript, null);
+        } else {
+            root.loadUrl("javascript:" + javascript);
+        }
+    }
+
+    private void evaluateJS(WebView root, String javascript) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
             root.evaluateJavascript(javascript, null);
         } else {
@@ -106,6 +128,7 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
     @ReactProp(name="injectedJavaScript")
     public void injectedJavaScript(WebView view, String js) {
         view.evaluateJavascript(js, null);
+        Log.d("inject", js);
     }
 //
 //    @ReactProp(name = "allowFileAccessFromFileURLs")
