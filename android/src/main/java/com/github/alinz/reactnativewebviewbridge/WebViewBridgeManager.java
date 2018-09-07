@@ -52,6 +52,11 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
     public static final int COMMAND_RELOAD = 105;
     public static final int COMMAND_LOAD_SOURCE = 106;
 
+    public final static String HEADER_CONTENT_TYPE = "content-type";
+
+    private static final String MIME_TEXT_HTML = "text/html";
+    private static final String MIME_UNKNOWN = "application/octet-stream";
+
     @Override
     public String getName() {
         return REACT_CLASS;
@@ -226,6 +231,25 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
         }
     }
 
+    public static Boolean responseRequiresJSInjection(Response response) {
+        // we don't want to inject JS into redirects
+        if (response.isRedirect()) {
+            return false;
+        }
+
+        // ...okhttp appends charset to content type sometimes, like "text/html; charset=UTF8"
+        final String contentTypeAndCharset = response.header(HEADER_CONTENT_TYPE, MIME_UNKNOWN);
+        // ...and we only want to inject it in to HTML, really
+        return contentTypeAndCharset.startsWith(MIME_TEXT_HTML);
+    }
+
+    public static Boolean urlStringLooksInvalid(String urlString) {
+        return urlString == null ||
+                urlString.trim().equals("") ||
+                !(urlString.startsWith("http") && !urlString.startsWith("www")) ||
+                urlString.contains("|");
+    }
+
     public WebResourceResponse shouldInterceptRequest(WebResourceRequest request, Boolean onlyMainFrame, ReactWebView webView) {
         Uri url = request.getUrl();
         String urlStr = url.toString();
@@ -234,9 +258,9 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
             return null;
         }
 
-//        if (urlStringLooksInvalid(urlStr)) {
-//            return null;
-//        }
+        if (urlStringLooksInvalid(urlStr)) {
+            return null;
+        }
 
         try {
             Request req = new Request.Builder()
@@ -252,9 +276,9 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
 
             Response response = httpClient.newCall(req).execute();
 
-//            if (!responseRequiresJSInjection(response)) {
-//                return null;
-//            }
+            if (!responseRequiresJSInjection(response)) {
+                return null;
+            }
 
             InputStream is = response.body().byteStream();
             MediaType contentType = response.body().contentType();
