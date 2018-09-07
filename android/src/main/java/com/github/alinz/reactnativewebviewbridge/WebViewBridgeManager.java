@@ -1,5 +1,6 @@
 package com.github.alinz.reactnativewebviewbridge;
 
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.text.TextUtils;
 import android.util.Log;
@@ -10,12 +11,21 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.LifecycleEventListener;
+import com.facebook.react.bridge.ReactContext;
 import com.facebook.react.bridge.ReadableArray;
+import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.uimanager.SimpleViewManager;
 import com.facebook.react.uimanager.ThemedReactContext;
+import com.facebook.react.uimanager.UIManagerModule;
+import com.facebook.react.uimanager.events.Event;
+import com.facebook.react.uimanager.events.EventDispatcher;
 import com.facebook.react.views.webview.ReactWebViewManager;
 import com.facebook.react.uimanager.annotations.ReactProp;
+import com.facebook.react.views.webview.events.TopLoadingErrorEvent;
+import com.facebook.react.views.webview.events.TopLoadingFinishEvent;
+import com.facebook.react.views.webview.events.TopLoadingStartEvent;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -35,14 +45,28 @@ import okhttp3.Response;
 import static okhttp3.internal.Util.UTF_8;
 
 public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager.ReactWebView> {
+    public enum Events {
+        ON_PAGE_CHANGE("onPageChange");
+
+        private final String mName;
+
+        Events(final String name) {
+            mName = name;
+        }
+
+        @Override
+        public String toString() {
+            return mName;
+        }
+    }
+
     private static final String REACT_CLASS = "RCTWebViewBridge";
 
     public static final int COMMAND_SEND_TO_BRIDGE = 101;
-
-    public final static String HEADER_CONTENT_TYPE = "content-type";
-
-    private static final String MIME_TEXT_HTML = "text/html";
-    private static final String MIME_UNKNOWN = "application/octet-stream";
+    public static final int COMMAND_EVALUTEJS = 102;
+    public static final int COMMAND_BACK = 103;
+    public static final int COMMAND_FORWARD = 104;
+    public static final int COMMAND_RELOAD = 105;
 
     @Override
     public String getName() {
@@ -56,6 +80,11 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
         Map<String, Integer> commandsMap = new HashMap<>();
 
         commandsMap.put("sendToBridge", COMMAND_SEND_TO_BRIDGE);
+        commandsMap.put("evaluateJS", COMMAND_EVALUTEJS);
+        commandsMap.put("goBack", COMMAND_BACK);
+        commandsMap.put("goForward", COMMAND_FORWARD);
+        commandsMap.put("reload", COMMAND_RELOAD);
+
 
         return commandsMap;
     }
@@ -70,7 +99,7 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new ReactWebViewClient());
         webView.getSettings().setDomStorageEnabled(true);
-        webView.getSettings().setJavaScriptEnabled(true);
+        webView.getSettings().setJavaScriptEnbaled(true);
         return webView;
     }
 
@@ -82,6 +111,19 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
             case COMMAND_SEND_TO_BRIDGE:
                 sendToBridge(root, args.getString(0));
                 break;
+            case COMMAND_EVALUTEJS:
+//                root.evaluateJavascript(args.getString(0), null);
+                evaluateJS(root, args.getString(0));
+                break;
+            case COMMAND_BACK:
+                root.goBack();
+                break;
+            case COMMAND_FORWARD:
+                root.goForward();
+                break;
+            case COMMAND_RELOAD:
+                root.reload();
+                break;
             default:
                 //do nothing!!!!
         }
@@ -90,7 +132,6 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
     private void sendToBridge(WebView view, String script) {
 //        String script = "WebViewBridge.onMessage('" + message + "');";
 //        String scrip2 = "WebViewBridge.send(\"aa\")";
-        Log.d("console", script);
         WebViewBridgeManager.evaluateJavascript(view, script);
     }
 
@@ -115,17 +156,17 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
         ((ReactWebView) view).setInjectedOnStartLoadingJavaScript(injectedJavaScript);
     }
 
-    @ReactProp(name="source")
+    @ReactProp(name = "source")
     public void loadUrl(WebView view, String url) {
         view.loadUrl(url);
     }
 
-    @ReactProp(name="javaScriptEnabled")
+    @ReactProp(name = "javaScriptEnabled")
     public void javaScriptEnabled(WebView view, Boolean enable) {
         view.getSettings().setJavaScriptEnabled(enable);
     }
 
-    @ReactProp(name="injectedJavaScript")
+    @ReactProp(name = "injectedJavaScript")
     public void injectedJavaScript(WebView view, String js) {
         view.evaluateJavascript(js, null);
         Log.d("inject", js);
@@ -198,26 +239,6 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
         }
     }
 
-    public static Boolean responseRequiresJSInjection(Response response) {
-        // we don't want to inject JS into redirects
-        if (response.isRedirect()) {
-            Log.d("redirect", "true");
-            return false;
-        }
-
-        // ...okhttp appends charset to content type sometimes, like "text/html; charset=UTF8"
-        final String contentTypeAndCharset = response.header(HEADER_CONTENT_TYPE, MIME_UNKNOWN);
-        // ...and we only want to inject it in to HTML, really
-        return contentTypeAndCharset.startsWith(MIME_TEXT_HTML);
-    }
-
-    public static Boolean urlStringLooksInvalid(String urlString) {
-        return urlString == null ||
-                urlString.trim().equals("") ||
-                !(urlString.startsWith("http") && !urlString.startsWith("www")) ||
-                urlString.contains("|");
-    }
-
     public WebResourceResponse shouldInterceptRequest(WebResourceRequest request, Boolean onlyMainFrame, ReactWebView webView) {
         Uri url = request.getUrl();
         String urlStr = url.toString();
@@ -226,12 +247,9 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
             return null;
         }
 
-        if (urlStringLooksInvalid(urlStr)) {
-            Log.d("INVALID", urlStr);
-            return null;
-        }
-
-        Log.d("URL", urlStr);
+//        if (urlStringLooksInvalid(urlStr)) {
+//            return null;
+//        }
 
         try {
             Request req = new Request.Builder()
@@ -247,10 +265,9 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
 
             Response response = httpClient.newCall(req).execute();
 
-            if (!responseRequiresJSInjection(response)) {
-                Log.d("JSINJECT", "true");
-                return null;
-            }
+//            if (!responseRequiresJSInjection(response)) {
+//                return null;
+//            }
 
             InputStream is = response.body().byteStream();
             MediaType contentType = response.body().contentType();
@@ -265,21 +282,66 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
         }
     }
 
+
     private class ReactWebViewClient extends WebViewClient {
+
+        protected boolean mLastLoadFailed = false;
 
         @Override
         public void onPageFinished(WebView webView, String url) {
             super.onPageFinished(webView, url);
+            if (!this.mLastLoadFailed) {
+                this.emitFinishEvent(webView, url);
+            }
+        }
+
+        @Override
+        public void onPageStarted(WebView webView, String url, Bitmap favicon) {
+            super.onPageStarted(webView, url, favicon);
+            this.mLastLoadFailed = false;
+            dispatchEvent(webView, new TopLoadingStartEvent(webView.getId(), this.createWebViewEvent(webView, url)));
+        }
+
+        @Override
+        public void onReceivedError(WebView webView, int errorCode, String description, String failingUrl) {
+            super.onReceivedError(webView, errorCode, description, failingUrl);
+            this.mLastLoadFailed = true;
+            this.emitFinishEvent(webView, failingUrl);
+            WritableMap eventData = this.createWebViewEvent(webView, failingUrl);
+            eventData.putDouble("code", (double) errorCode);
+            eventData.putString("description", description);
+            dispatchEvent(webView, new TopLoadingErrorEvent(webView.getId(), eventData));
+        }
+
+        protected void emitFinishEvent(WebView webView, String url) {
+            dispatchEvent(webView, new TopLoadingFinishEvent(webView.getId(), this.createWebViewEvent(webView, url)));
+        }
+
+        protected WritableMap createWebViewEvent(WebView webView, String url) {
+            WritableMap event = Arguments.createMap();
+            event.putDouble("target", (double) webView.getId());
+            event.putString("url", url);
+            event.putBoolean("loading", !this.mLastLoadFailed && webView.getProgress() != 100);
+            event.putString("title", webView.getTitle());
+            event.putBoolean("canGoBack", webView.canGoBack());
+            event.putBoolean("canGoForward", webView.canGoForward());
+            return event;
         }
 
         @Override
         public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-            WebResourceResponse response = WebViewBridgeManager.this.shouldInterceptRequest(request, true, (ReactWebView)view);
+            WebResourceResponse response = WebViewBridgeManager.this.shouldInterceptRequest(request, true, (ReactWebView) view);
             if (response != null) {
                 Log.d("GOLDEN", "shouldInterceptRequest / WebViewClient -> return intercept response");
                 return response;
             }
             return super.shouldInterceptRequest(view, request);
         }
+    }
+
+    protected static void dispatchEvent(WebView webView, Event event) {
+        ReactContext reactContext = (ReactContext) webView.getContext();
+        EventDispatcher eventDispatcher = (reactContext.getNativeModule(UIManagerModule.class)).getEventDispatcher();
+        eventDispatcher.dispatchEvent(event);
     }
 }
