@@ -99,7 +99,6 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new ReactWebViewClient());
         webView.getSettings().setDomStorageEnabled(true);
-        webView.getSettings().setJavaScriptEnbaled(true);
         return webView;
     }
 
