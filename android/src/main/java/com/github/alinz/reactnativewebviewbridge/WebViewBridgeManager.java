@@ -336,6 +336,12 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
             }
             return super.shouldInterceptRequest(view, request);
         }
+        
+        @Override
+        public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
+            super.doUpdateVisitedHistory(view, url, isReload);
+            dispatchEvent(view, new TopLoadingStartEvent(view.getId(), this.createWebViewEvent(view, url)));
+        }
     }
 
     protected static void dispatchEvent(WebView webView, Event event) {
