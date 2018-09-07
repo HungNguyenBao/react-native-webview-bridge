@@ -21,7 +21,6 @@ import com.facebook.react.uimanager.ThemedReactContext;
 import com.facebook.react.uimanager.UIManagerModule;
 import com.facebook.react.uimanager.events.Event;
 import com.facebook.react.uimanager.events.EventDispatcher;
-import com.facebook.react.views.webview.ReactWebViewManager;
 import com.facebook.react.uimanager.annotations.ReactProp;
 import com.facebook.react.views.webview.events.TopLoadingErrorEvent;
 import com.facebook.react.views.webview.events.TopLoadingFinishEvent;
@@ -31,7 +30,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -45,21 +43,6 @@ import okhttp3.Response;
 import static okhttp3.internal.Util.UTF_8;
 
 public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager.ReactWebView> {
-    public enum Events {
-        ON_PAGE_CHANGE("onPageChange");
-
-        private final String mName;
-
-        Events(final String name) {
-            mName = name;
-        }
-
-        @Override
-        public String toString() {
-            return mName;
-        }
-    }
-
     private static final String REACT_CLASS = "RCTWebViewBridge";
 
     public static final int COMMAND_SEND_TO_BRIDGE = 101;
@@ -67,6 +50,7 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
     public static final int COMMAND_BACK = 103;
     public static final int COMMAND_FORWARD = 104;
     public static final int COMMAND_RELOAD = 105;
+    public static final int COMMAND_LOAD_SOURCE = 106;
 
     @Override
     public String getName() {
@@ -84,6 +68,7 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
         commandsMap.put("goBack", COMMAND_BACK);
         commandsMap.put("goForward", COMMAND_FORWARD);
         commandsMap.put("reload", COMMAND_RELOAD);
+        commandsMap.put("loadSource", COMMAND_LOAD_SOURCE);
 
 
         return commandsMap;
@@ -96,7 +81,7 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
         ViewGroup.LayoutParams params = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         webView.setLayoutParams(params);
         webView.addJavascriptInterface(new JavascriptBridge(webView), "WebViewBridge");
-        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebChromeClient(new ReactWebChromeClient());
         webView.setWebViewClient(new ReactWebViewClient());
         webView.getSettings().setDomStorageEnabled(true);
         return webView;
@@ -122,6 +107,9 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
                 break;
             case COMMAND_RELOAD:
                 root.reload();
+                break;
+            case COMMAND_LOAD_SOURCE:
+                root.loadUrl(args.getString(0));
                 break;
             default:
                 //do nothing!!!!
@@ -281,6 +269,19 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
         }
     }
 
+    private class ReactWebChromeClient extends WebChromeClient {
+        @Override
+        public void onProgressChanged(WebView view, int newProgress) {
+            super.onProgressChanged(view, newProgress);
+            dispatchEvent(view, new TopLoadingFinishEvent(view.getId(), this.createWebViewEvent(newProgress)));
+        }
+
+        protected WritableMap createWebViewEvent(int progress) {
+            WritableMap event = Arguments.createMap();
+            event.putInt("progress", progress);
+            return event;
+        }
+    }
 
     private class ReactWebViewClient extends WebViewClient {
 
@@ -313,7 +314,7 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
         }
 
         protected void emitFinishEvent(WebView webView, String url) {
-            dispatchEvent(webView, new TopLoadingFinishEvent(webView.getId(), this.createWebViewEvent(webView, url)));
+//            dispatchEvent(webView, new TopLoadingFinishEvent(webView.getId(), this.createWebViewEvent(webView, url)));
         }
 
         protected WritableMap createWebViewEvent(WebView webView, String url) {
