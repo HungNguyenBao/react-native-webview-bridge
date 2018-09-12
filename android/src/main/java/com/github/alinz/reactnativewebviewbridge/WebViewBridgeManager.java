@@ -363,6 +363,14 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
         }
         
         @Override
+        public boolean shouldOverrideUrlLoading(WebView view, String url) {
+            if(WebViewBridgeManager.urlStringLooksInvalid(url)){
+                return true;
+            }
+            return false;
+        }
+        
+        @Override
         public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
             super.doUpdateVisitedHistory(view, url, isReload);
             dispatchEvent(view, new TopLoadingStartEvent(view.getId(), this.createWebViewEvent(view, url)));
