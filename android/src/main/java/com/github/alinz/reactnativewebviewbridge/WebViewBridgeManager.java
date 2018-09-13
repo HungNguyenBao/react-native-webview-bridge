@@ -253,6 +253,11 @@ public class WebViewBridgeManager extends SimpleViewManager<WebViewBridgeManager
     public WebResourceResponse shouldInterceptRequest(WebResourceRequest request, Boolean onlyMainFrame, ReactWebView webView) {
         Uri url = request.getUrl();
         String urlStr = url.toString();
+        
+        if(urlStr.contains("mixpanel") || urlStr.contains("cdn.segment.com")){
+            Log.d("URL", "LOCK MIXPANEL");
+            return new WebResourceResponse("text/html", UTF_8.name(), null);
+        }
 
         if (onlyMainFrame && !request.isForMainFrame()) {
             return null;
